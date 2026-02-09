@@ -50,6 +50,40 @@ export default function LandingPage() {
           </p>
         </section>
 
+        {/* Showcase */}
+        <section className="px-6 pb-24">
+          <div className="max-w-6xl mx-auto">
+            <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-widest text-center mb-12">
+              Example Designs
+            </h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
+              {[
+                { label: 'ADVENTURE', bg: 'from-emerald-900/40 to-emerald-950/60', text: 'text-emerald-400' },
+                { label: 'EXPLORE', bg: 'from-sky-900/40 to-sky-950/60', text: 'text-sky-400' },
+                { label: 'CREATE', bg: 'from-violet-900/40 to-violet-950/60', text: 'text-violet-400' },
+                { label: 'DREAM', bg: 'from-amber-900/40 to-amber-950/60', text: 'text-amber-400' },
+                { label: 'WONDER', bg: 'from-rose-900/40 to-rose-950/60', text: 'text-rose-400' },
+                { label: 'INSPIRE', bg: 'from-teal-900/40 to-teal-950/60', text: 'text-teal-400' },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className={`relative aspect-[4/5] rounded-xl overflow-hidden border border-border bg-gradient-to-br ${item.bg} flex items-center justify-center group cursor-pointer`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/placeholder.svg?height=500&width=400`}
+                    alt={item.label}
+                    className="absolute inset-0 w-full h-full object-cover opacity-30 group-hover:opacity-40 transition-opacity duration-300"
+                  />
+                  <span className={`relative text-2xl sm:text-3xl md:text-4xl font-bold tracking-widest ${item.text} opacity-80 group-hover:opacity-100 transition-opacity duration-300`}>
+                    {item.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         {/* Features */}
         <section className="px-6 pb-24">
           <div className="max-w-5xl mx-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-px bg-border rounded-xl overflow-hidden border border-border">
