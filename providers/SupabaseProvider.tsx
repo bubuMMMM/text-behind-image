@@ -13,7 +13,10 @@ const SupabaseProvider: React.FC<SupabaseProviderProps> = ({
     children
 }) => {
     const [supabaseClient] = useState(() => 
-        createClientComponentClient<Database>()
+        createClientComponentClient<Database>({
+            supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+            supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+        })
     )
 
     return (
