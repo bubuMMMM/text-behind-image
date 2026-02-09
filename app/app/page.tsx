@@ -1,7 +1,7 @@
-// app/app/page.tsx
 'use client'
 
 import React, { useRef, useState } from 'react';
+import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -12,7 +12,7 @@ import TextCustomizer from '@/components/editor/text-customizer';
 import AiImageGenerator from '@/components/editor/ai-image-generator';
 
 import { PlusIcon, ReloadIcon } from '@radix-ui/react-icons';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Upload, Download, ArrowLeft } from 'lucide-react';
 
 import { removeBackground } from "@imgly/background-removal";
 
@@ -56,7 +56,6 @@ const Page = () => {
     const handleAiImageGenerated = async (dataUrl: string) => {
         setIsImageSetupDone(false);
         setRemovedBgImageUrl(null);
-        // dataUrl is already a base64 data URL from the API, use it directly
         setSelectedImage(dataUrl);
         await setupImage(dataUrl);
     };
@@ -69,16 +68,21 @@ const Page = () => {
             fontFamily: 'Inter',
             top: 0,
             left: 0,
-            color: 'white',
+            color: '#ffffff',
             fontSize: 200,
             fontWeight: 800,
             opacity: 1,
             shadowColor: 'rgba(0, 0, 0, 0.8)',
-            shadowSize: 4,
+            shadowSize: 0,
             rotation: 0,
             tiltX: 0,
             tiltY: 0,
-            letterSpacing: 0
+            letterSpacing: 0,
+            strokeColor: '#000000',
+            strokeWidth: 0,
+            useGradient: false,
+            gradientFrom: '#ffffff',
+            gradientTo: '#888888',
         }]);
     };
 
@@ -115,12 +119,11 @@ const Page = () => {
             textSets.forEach(textSet => {
                 ctx.save();
                 
-                ctx.font = `${textSet.fontWeight} ${textSet.fontSize * 3}px ${textSet.fontFamily}`;
-                ctx.fillStyle = textSet.color;
+                const scaledFontSize = textSet.fontSize * 3;
+                ctx.font = `${textSet.fontWeight} ${scaledFontSize}px ${textSet.fontFamily}`;
                 ctx.globalAlpha = textSet.opacity;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.letterSpacing = `${textSet.letterSpacing}px`;
     
                 const x = canvas.width * (textSet.left + 50) / 100;
                 const y = canvas.height * (50 - textSet.top) / 100;
@@ -140,19 +143,57 @@ const Page = () => {
                 );
     
                 ctx.rotate((textSet.rotation * Math.PI) / 180);
+
+                // Shadow
+                if (textSet.shadowSize > 0) {
+                    ctx.shadowColor = textSet.shadowColor;
+                    ctx.shadowBlur = textSet.shadowSize * 3;
+                    ctx.shadowOffsetX = 0;
+                    ctx.shadowOffsetY = 0;
+                }
+
+                // Stroke
+                if (textSet.strokeWidth > 0) {
+                    ctx.strokeStyle = textSet.strokeColor;
+                    ctx.lineWidth = textSet.strokeWidth * 3;
+                    ctx.lineJoin = 'round';
+                    if (textSet.letterSpacing === 0) {
+                        ctx.strokeText(textSet.text, 0, 0);
+                    } else {
+                        const chars = textSet.text.split('');
+                        let totalWidth = 0;
+                        chars.forEach((char: string, i: number) => {
+                            totalWidth += ctx.measureText(char).width + (i < chars.length - 1 ? textSet.letterSpacing : 0);
+                        });
+                        let currentX = -totalWidth / 2;
+                        chars.forEach((char: string) => {
+                            const charWidth = ctx.measureText(char).width;
+                            ctx.strokeText(char, currentX + charWidth / 2, 0);
+                            currentX += charWidth + textSet.letterSpacing;
+                        });
+                    }
+                }
+
+                // Fill (gradient or solid)
+                if (textSet.useGradient) {
+                    const textWidth = ctx.measureText(textSet.text).width;
+                    const gradient = ctx.createLinearGradient(-textWidth / 2, 0, textWidth / 2, 0);
+                    gradient.addColorStop(0, textSet.gradientFrom);
+                    gradient.addColorStop(1, textSet.gradientTo);
+                    ctx.fillStyle = gradient;
+                } else {
+                    ctx.fillStyle = textSet.color;
+                }
     
                 if (textSet.letterSpacing === 0) {
                     ctx.fillText(textSet.text, 0, 0);
                 } else {
                     const chars = textSet.text.split('');
-                    let currentX = 0;
-                    const totalWidth = chars.reduce((width: number, char: string, i: number) => {
-                        const charWidth = ctx.measureText(char).width;
-                        return width + charWidth + (i < chars.length - 1 ? textSet.letterSpacing : 0);
-                    }, 0);
-                    
-                    currentX = -totalWidth / 2;
-                    
+                    let totalWidth = 0;
+                    chars.forEach((char: string, i: number) => {
+                        totalWidth += ctx.measureText(char).width + (i < chars.length - 1 ? textSet.letterSpacing : 0);
+                    });
+                    let currentX = -totalWidth / 2;
                     chars.forEach((char: string) => {
                         const charWidth = ctx.measureText(char).width;
                         ctx.fillText(char, currentX + charWidth / 2, 0);
@@ -186,13 +227,22 @@ const Page = () => {
     };
     
     return (
-        <div className='flex flex-col h-screen'>
-            <header className='flex flex-row items-center justify-between p-5 px-10'>
-                <h2 className="text-4xl md:text-2xl font-semibold tracking-tight">
-                    <span className="block md:hidden">TBI</span>
-                    <span className="hidden md:block">Text behind image editor</span>
-                </h2>
-                <div className='flex gap-4 items-center'>
+        <div className='flex flex-col h-screen bg-background'>
+            {/* Header */}
+            <header className='flex items-center justify-between px-4 md:px-6 h-14 border-b border-border'>
+                <div className="flex items-center gap-4">
+                    <Link href="/" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
+                        <ArrowLeft className="h-4 w-4" />
+                        <span className="text-sm hidden md:inline">Back</span>
+                    </Link>
+                    <Separator orientation="vertical" className="h-6" />
+                    <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                        <span className="md:hidden">TBI</span>
+                        <span className="hidden md:inline">Text Behind Image</span>
+                    </h2>
+                </div>
+
+                <div className='flex items-center gap-2'>
                     <input
                         type="file"
                         ref={fileInputRef}
@@ -200,36 +250,31 @@ const Page = () => {
                         onChange={handleFileChange}
                         accept=".jpg, .jpeg, .png"
                     />
-                    <div className='flex items-center gap-5'>
-                        <div className='flex gap-2'>
-                            <Button onClick={handleUploadImage}>
-                                Upload image
-                            </Button>
-                            <Button variant="outline" onClick={() => setIsAiGeneratorOpen(true)}>
-                                <Sparkles className="mr-2 h-4 w-4" />
-                                Generate with AI
-                            </Button>
-                            {selectedImage && (
-                                <Button onClick={saveCompositeImage} className='hidden md:flex'>
-                                    Save image
-                                </Button>
-                            )}
-                        </div>
-                    </div>
+                    <Button variant="outline" size="sm" onClick={handleUploadImage} className="gap-2">
+                        <Upload className="h-3.5 w-3.5" />
+                        <span className="hidden md:inline">Upload</span>
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setIsAiGeneratorOpen(true)} className="gap-2">
+                        <Sparkles className="h-3.5 w-3.5" />
+                        <span className="hidden md:inline">AI Generate</span>
+                    </Button>
+                    {selectedImage && (
+                        <Button size="sm" onClick={saveCompositeImage} className="gap-2">
+                            <Download className="h-3.5 w-3.5" />
+                            <span className="hidden md:inline">Export</span>
+                        </Button>
+                    )}
+                    <Separator orientation="vertical" className="h-6 mx-1" />
                     <ModeToggle />
                 </div>
             </header>
-            <Separator /> 
+
             {selectedImage ? (
-                <div className='flex flex-col md:flex-row items-start justify-start gap-10 w-full h-screen px-10 mt-2'>
-                    <div className="flex flex-col items-start justify-start w-full md:w-1/2 gap-4">
+                <div className='flex flex-col md:flex-row flex-1 overflow-hidden'>
+                    {/* Canvas area */}
+                    <div className="flex-1 flex items-center justify-center p-4 md:p-8 bg-muted/30 overflow-auto">
                         <canvas ref={canvasRef} style={{ display: 'none' }} />
-                        <div className='flex items-center gap-2'>
-                            <Button onClick={saveCompositeImage} className='md:hidden'>
-                                Save image
-                            </Button>
-                        </div>
-                        <div className="min-h-[400px] w-[80%] p-4 border border-border rounded-lg relative overflow-hidden">
+                        <div className="relative w-full max-w-2xl aspect-square rounded-lg overflow-hidden border border-border bg-muted/50 shadow-sm">
                             {isImageSetupDone ? (
                                 /* eslint-disable-next-line @next/next/no-img-element */
                                 <img
@@ -238,7 +283,10 @@ const Page = () => {
                                     className="absolute inset-0 w-full h-full object-contain"
                                 />
                             ) : (
-                                <span className='flex items-center w-full gap-2'><ReloadIcon className='animate-spin' /> Loading, please wait</span>
+                                <div className='flex flex-col items-center justify-center w-full h-full gap-3'>
+                                    <ReloadIcon className='h-5 w-5 animate-spin text-muted-foreground' />
+                                    <span className='text-sm text-muted-foreground'>Processing image...</span>
+                                </div>
                             )}
                             {isImageSetupDone && textSets.map(textSet => (
                                 <div
@@ -254,14 +302,25 @@ const Page = () => {
                                             rotateX(${textSet.tiltX}deg)
                                             rotateY(${textSet.tiltY}deg)
                                         `,
-                                        color: textSet.color,
+                                        color: textSet.useGradient ? 'transparent' : textSet.color,
+                                        background: textSet.useGradient
+                                            ? `linear-gradient(90deg, ${textSet.gradientFrom}, ${textSet.gradientTo})`
+                                            : 'none',
+                                        WebkitBackgroundClip: textSet.useGradient ? 'text' : undefined,
+                                        WebkitTextFillColor: textSet.useGradient ? 'transparent' : undefined,
                                         textAlign: 'center',
                                         fontSize: `${textSet.fontSize}px`,
                                         fontWeight: textSet.fontWeight,
                                         fontFamily: textSet.fontFamily,
                                         opacity: textSet.opacity,
                                         letterSpacing: `${textSet.letterSpacing}px`,
-                                        transformStyle: 'preserve-3d'
+                                        transformStyle: 'preserve-3d',
+                                        textShadow: textSet.shadowSize > 0
+                                            ? `0 0 ${textSet.shadowSize}px ${textSet.shadowColor}`
+                                            : 'none',
+                                        WebkitTextStroke: textSet.strokeWidth > 0
+                                            ? `${textSet.strokeWidth}px ${textSet.strokeColor}`
+                                            : undefined,
                                     }}
                                 >
                                     {textSet.text}
@@ -277,32 +336,48 @@ const Page = () => {
                             )}
                         </div>
                     </div>
-                    <div className='flex flex-col w-full md:w-1/2'>
-                        <Button variant={'secondary'} onClick={addNewTextSet}><PlusIcon className='mr-2'/> Add New Text Set</Button>
-                        <ScrollArea className="h-[calc(100vh-10rem)] p-2">
-                            <Accordion type="single" collapsible className="w-full mt-2">
-                                {textSets.map(textSet => (
-                                    <TextCustomizer 
-                                        key={textSet.id}
-                                        textSet={textSet}
-                                        handleAttributeChange={handleAttributeChange}
-                                        removeTextSet={removeTextSet}
-                                        duplicateTextSet={duplicateTextSet}
-                                    />
-                                ))}
-                            </Accordion>
+
+                    {/* Sidebar */}
+                    <div className='w-full md:w-[380px] border-t md:border-t-0 md:border-l border-border flex flex-col bg-background'>
+                        <div className="p-3 border-b border-border">
+                            <Button variant={'secondary'} onClick={addNewTextSet} className="w-full gap-2 h-9 text-sm">
+                                <PlusIcon className='h-3.5 w-3.5' />
+                                Add Text Layer
+                            </Button>
+                        </div>
+                        <ScrollArea className="flex-1">
+                            <div className="p-3">
+                                <Accordion type="single" collapsible className="w-full">
+                                    {textSets.map(textSet => (
+                                        <TextCustomizer 
+                                            key={textSet.id}
+                                            textSet={textSet}
+                                            handleAttributeChange={handleAttributeChange}
+                                            removeTextSet={removeTextSet}
+                                            duplicateTextSet={duplicateTextSet}
+                                        />
+                                    ))}
+                                </Accordion>
+                            </div>
                         </ScrollArea>
                     </div>
                 </div>
             ) : (
-                <div className='flex flex-col items-center justify-center min-h-screen w-full gap-4'>
-                    <h2 className="text-xl font-semibold">Welcome, get started by uploading or generating an image!</h2>
+                <div className='flex-1 flex flex-col items-center justify-center gap-6'>
+                    <div className="flex flex-col items-center gap-2">
+                        <div className="h-12 w-12 rounded-xl bg-muted flex items-center justify-center mb-2">
+                            <Sparkles className="h-6 w-6 text-muted-foreground" />
+                        </div>
+                        <h2 className="text-xl font-semibold text-foreground tracking-tight">Get started</h2>
+                        <p className="text-sm text-muted-foreground">Upload a photo or generate one with AI</p>
+                    </div>
                     <div className="flex gap-3">
-                        <Button onClick={handleUploadImage}>
-                            Upload image
+                        <Button variant="outline" onClick={handleUploadImage} className="gap-2">
+                            <Upload className="h-4 w-4" />
+                            Upload Image
                         </Button>
-                        <Button variant="outline" onClick={() => setIsAiGeneratorOpen(true)}>
-                            <Sparkles className="mr-2 h-4 w-4" />
+                        <Button onClick={() => setIsAiGeneratorOpen(true)} className="gap-2">
+                            <Sparkles className="h-4 w-4" />
                             Generate with AI
                         </Button>
                     </div>

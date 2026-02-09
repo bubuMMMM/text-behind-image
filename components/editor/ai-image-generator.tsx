@@ -14,6 +14,14 @@ import {
 import { ReloadIcon } from '@radix-ui/react-icons'
 import { ImageIcon, X, Upload, Sparkles } from 'lucide-react'
 
+const ASPECT_RATIOS = [
+  { label: '1:1', value: 'square' },
+  { label: '16:9', value: 'landscape_16_9' },
+  { label: '9:16', value: 'portrait_9_16' },
+  { label: '4:3', value: 'landscape_4_3' },
+  { label: '3:4', value: 'portrait_3_4' },
+]
+
 interface AiImageGeneratorProps {
   isOpen: boolean
   onClose: () => void
@@ -26,8 +34,8 @@ const AiImageGenerator: React.FC<AiImageGeneratorProps> = ({
   onImageGenerated,
 }) => {
   const [prompt, setPrompt] = useState('')
+  const [aspectRatio, setAspectRatio] = useState('square')
   const [referenceImages, setReferenceImages] = useState<string[]>([])
-  const [referenceFiles, setReferenceFiles] = useState<File[]>([])
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [generatedPreview, setGeneratedPreview] = useState<string | null>(null)
@@ -45,7 +53,6 @@ const AiImageGenerator: React.FC<AiImageGeneratorProps> = ({
       reader.onload = (e) => {
         const dataUrl = e.target?.result as string
         setReferenceImages((prev) => [...prev, dataUrl])
-        setReferenceFiles((prev) => [...prev, file])
       }
       reader.readAsDataURL(file)
     })
@@ -57,7 +64,6 @@ const AiImageGenerator: React.FC<AiImageGeneratorProps> = ({
 
   const removeReferenceImage = (index: number) => {
     setReferenceImages((prev) => prev.filter((_, i) => i !== index))
-    setReferenceFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
   const handleGenerate = async () => {
@@ -73,6 +79,7 @@ const AiImageGenerator: React.FC<AiImageGeneratorProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: prompt.trim(),
+          aspect_ratio: aspectRatio,
           image_urls: referenceImages.length > 0 ? referenceImages : undefined,
         }),
       })
@@ -101,8 +108,8 @@ const AiImageGenerator: React.FC<AiImageGeneratorProps> = ({
 
   const handleReset = () => {
     setPrompt('')
+    setAspectRatio('square')
     setReferenceImages([])
-    setReferenceFiles([])
     setError(null)
     setGeneratedPreview(null)
     setIsGenerating(false)
@@ -112,45 +119,65 @@ const AiImageGenerator: React.FC<AiImageGeneratorProps> = ({
     <Dialog
       open={isOpen}
       onOpenChange={(open) => {
-        if (!open) {
-          onClose()
-        }
+        if (!open) onClose()
       }}
     >
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto bg-card border-border">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5" />
+          <DialogTitle className="flex items-center gap-2 text-foreground">
+            <Sparkles className="h-4 w-4" />
             AI Image Generator
           </DialogTitle>
-          <DialogDescription>
-            Generate an image with AI using Nano Banana. You can optionally add up to 2 reference photos.
+          <DialogDescription className="text-muted-foreground">
+            Generate images using Nano Banana. Optionally add up to 2 reference photos.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4 py-4">
+        <div className="flex flex-col gap-5 py-2">
           {/* Prompt */}
           <div className="flex flex-col gap-2">
-            <Label htmlFor="ai-prompt">Prompt</Label>
+            <Label htmlFor="ai-prompt" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Prompt</Label>
             <textarea
               id="ai-prompt"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="Describe the image you want to generate..."
-              className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+              className="flex min-h-[80px] w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none"
               disabled={isGenerating}
             />
           </div>
 
+          {/* Aspect Ratio */}
+          <div className="flex flex-col gap-2">
+            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Aspect Ratio</Label>
+            <div className="flex gap-2 flex-wrap">
+              {ASPECT_RATIOS.map((ratio) => (
+                <button
+                  key={ratio.value}
+                  onClick={() => setAspectRatio(ratio.value)}
+                  disabled={isGenerating}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors border ${
+                    aspectRatio === ratio.value
+                      ? 'bg-foreground text-background border-foreground'
+                      : 'bg-secondary text-secondary-foreground border-border hover:bg-accent'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  {ratio.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Reference images */}
           <div className="flex flex-col gap-2">
-            <Label>Reference Photos (optional, max 2)</Label>
-            <div className="flex gap-3 flex-wrap">
+            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Reference Photos (optional, max 2)</Label>
+            <div className="flex gap-2 flex-wrap">
               {referenceImages.map((img, index) => (
                 <div
                   key={index}
-                  className="relative w-24 h-24 rounded-lg overflow-hidden border border-border group"
+                  className="relative w-20 h-20 rounded-lg overflow-hidden border border-border group"
                 >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={img}
                     alt={`Reference ${index + 1}`}
@@ -158,7 +185,7 @@ const AiImageGenerator: React.FC<AiImageGeneratorProps> = ({
                   />
                   <button
                     onClick={() => removeReferenceImage(index)}
-                    className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute top-1 right-1 bg-background/80 backdrop-blur-sm text-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
                     aria-label={`Remove reference image ${index + 1}`}
                   >
                     <X className="h-3 w-3" />
@@ -169,11 +196,11 @@ const AiImageGenerator: React.FC<AiImageGeneratorProps> = ({
               {referenceImages.length < 2 && (
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-24 h-24 rounded-lg border-2 border-dashed border-muted-foreground/25 flex flex-col items-center justify-center gap-1 text-muted-foreground hover:border-muted-foreground/50 hover:text-foreground transition-colors"
+                  className="w-20 h-20 rounded-lg border border-dashed border-border flex flex-col items-center justify-center gap-1 text-muted-foreground hover:border-muted-foreground hover:text-foreground transition-colors"
                   disabled={isGenerating}
                 >
-                  <Upload className="h-5 w-5" />
-                  <span className="text-xs">Add</span>
+                  <Upload className="h-4 w-4" />
+                  <span className="text-[10px]">Add</span>
                 </button>
               )}
             </div>
@@ -189,32 +216,32 @@ const AiImageGenerator: React.FC<AiImageGeneratorProps> = ({
 
           {/* Error */}
           {error && (
-            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
               {error}
             </div>
           )}
 
           {/* Loading state */}
           {isGenerating && (
-            <div className="flex flex-col items-center justify-center gap-3 py-8">
-              <div className="relative w-16 h-16">
-                <div className="absolute inset-0 rounded-full border-4 border-muted" />
-                <div className="absolute inset-0 rounded-full border-4 border-t-foreground animate-spin" />
+            <div className="flex flex-col items-center justify-center gap-3 py-10 rounded-lg border border-border bg-muted/30">
+              <div className="relative w-10 h-10">
+                <div className="absolute inset-0 rounded-full border-2 border-muted" />
+                <div className="absolute inset-0 rounded-full border-2 border-t-foreground animate-spin" />
               </div>
-              <p className="text-sm text-muted-foreground animate-pulse">Generating your image...</p>
+              <p className="text-xs text-muted-foreground">Generating your image...</p>
             </div>
           )}
 
           {/* Generated preview */}
           {generatedPreview && !isGenerating && (
             <div className="flex flex-col gap-2">
-              <Label>Generated Image</Label>
-              <div className="relative w-full aspect-square max-h-[300px] rounded-lg overflow-hidden border border-border bg-muted">
+              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Result</Label>
+              <div className="relative w-full rounded-lg overflow-hidden border border-border bg-muted/30">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={generatedPreview}
                   alt="Generated"
-                  className="w-full h-full object-contain"
+                  className="w-full h-auto object-contain"
                 />
               </div>
             </div>
@@ -224,28 +251,30 @@ const AiImageGenerator: React.FC<AiImageGeneratorProps> = ({
         <DialogFooter className="flex gap-2 sm:gap-0">
           {generatedPreview ? (
             <>
-              <Button variant="outline" onClick={handleReset}>
+              <Button variant="outline" size="sm" onClick={handleReset}>
                 Generate Another
               </Button>
-              <Button onClick={handleUseImage}>
-                <ImageIcon className="mr-2 h-4 w-4" />
+              <Button size="sm" onClick={handleUseImage} className="gap-2">
+                <ImageIcon className="h-3.5 w-3.5" />
                 Use This Image
               </Button>
             </>
           ) : (
             <Button
+              size="sm"
               onClick={handleGenerate}
               disabled={!prompt.trim() || isGenerating}
+              className="gap-2"
             >
               {isGenerating ? (
                 <>
-                  <ReloadIcon className="mr-2 h-4 w-4 animate-spin" />
+                  <ReloadIcon className="h-3.5 w-3.5 animate-spin" />
                   Generating...
                 </>
               ) : (
                 <>
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  Generate Image
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Generate
                 </>
               )}
             </Button>

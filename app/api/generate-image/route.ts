@@ -7,7 +7,7 @@ fal.config({
 
 export async function POST(request: NextRequest) {
   try {
-    const { prompt, image_urls } = await request.json()
+    const { prompt, image_urls, aspect_ratio } = await request.json()
 
     if (!prompt) {
       return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
@@ -15,7 +15,6 @@ export async function POST(request: NextRequest) {
 
     const hasReferenceImages = image_urls && image_urls.length > 0
 
-    // Use edit endpoint when reference images are provided, otherwise text-to-image
     const model = hasReferenceImages
       ? 'fal-ai/nano-banana/edit'
       : 'fal-ai/nano-banana'
@@ -23,7 +22,7 @@ export async function POST(request: NextRequest) {
     const input: Record<string, unknown> = {
       prompt,
       num_images: 1,
-      aspect_ratio: '1:1',
+      aspect_ratio: aspect_ratio || 'square',
       output_format: 'png',
     }
 
@@ -41,8 +40,6 @@ export async function POST(request: NextRequest) {
       throw new Error('No image generated')
     }
 
-    // Fetch the image from fal and convert to base64 data URL
-    // so the browser can display it without CORS issues
     const imageResponse = await fetch(imageUrl)
     if (!imageResponse.ok) {
       throw new Error('Failed to fetch generated image')
