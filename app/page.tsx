@@ -29,7 +29,7 @@ export default function LandingPage() {
             <Sparkles className="h-3.5 w-3.5" />
             Now with AI Image Generation
           </div>
-          <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-foreground max-w-4xl text-balance leading-[1.1]">
+          <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold tracking-tight text-foreground max-w-4xl text-balance leading-[1.1]">
             Place text behind
             <br />
             <span className="text-muted-foreground">any image</span>
@@ -52,7 +52,7 @@ export default function LandingPage() {
 
         {/* Features */}
         <section className="px-6 pb-24">
-          <div className="max-w-5xl mx-auto grid md:grid-cols-4 gap-px bg-border rounded-xl overflow-hidden border border-border">
+          <div className="max-w-5xl mx-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-px bg-border rounded-xl overflow-hidden border border-border">
             {[
               {
                 icon: <Layers className="h-5 w-5" />,

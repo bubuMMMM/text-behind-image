@@ -338,7 +338,7 @@ const Page = () => {
                     </div>
 
                     {/* Sidebar */}
-                    <div className='w-full md:w-[380px] border-t md:border-t-0 md:border-l border-border flex flex-col bg-background'>
+                    <div className='w-full max-h-[40vh] md:max-h-none md:w-[380px] border-t md:border-t-0 md:border-l border-border flex flex-col bg-background'>
                         <div className="p-3 border-b border-border">
                             <Button variant={'secondary'} onClick={addNewTextSet} className="w-full gap-2 h-9 text-sm">
                                 <PlusIcon className='h-3.5 w-3.5' />

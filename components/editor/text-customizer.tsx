@@ -13,8 +13,8 @@ import {
 } from "@/components/ui/accordion"
 import { 
   Move, Text, Bold, RotateCw, Palette, LightbulbIcon, CaseSensitive, 
-  TypeOutline, ArrowLeftRight, ArrowUpDown, AlignHorizontalSpaceAround,
-  PenLine, Droplets, Gradient, Copy, Trash2
+  Type, ArrowLeftRight, ArrowUpDown, AlignHorizontalSpaceAround,
+  PenLine, Droplets, Paintbrush, Copy, Trash2
 } from 'lucide-react';
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 
@@ -51,9 +51,9 @@ const TextCustomizer: React.FC<TextCustomizerProps> = ({ textSet, handleAttribut
 
     const controls = [
         { id: 'text', icon: <CaseSensitive size={16} />, label: 'Text' },
-        { id: 'fontFamily', icon: <TypeOutline size={16} />, label: 'Font' },
+        { id: 'fontFamily', icon: <Type size={16} />, label: 'Font' },
         { id: 'color', icon: <Palette size={16} />, label: 'Color' },
-        { id: 'gradient', icon: <Gradient size={16} />, label: 'Gradient' },
+        { id: 'gradient', icon: <Paintbrush size={16} />, label: 'Gradient' },
         { id: 'stroke', icon: <PenLine size={16} />, label: 'Stroke' },
         { id: 'shadow', icon: <Droplets size={16} />, label: 'Shadow' },
         { id: 'position', icon: <Move size={16} />, label: 'Position' },
