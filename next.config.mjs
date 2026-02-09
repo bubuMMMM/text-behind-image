@@ -10,6 +10,14 @@ const nextConfig = {
               protocol: 'https',
               hostname: 'lxlfwrdbdhafahrrgtzk.supabase.co',
             },
+            {
+              protocol: 'https',
+              hostname: 'fal.media',
+            },
+            {
+              protocol: 'https',
+              hostname: 'v3.fal.media',
+            },
           ],
     },
 

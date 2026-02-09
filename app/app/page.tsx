@@ -17,8 +17,10 @@ import { ModeToggle } from '@/components/mode-toggle';
 import { Profile } from '@/types';
 import Authenticate from '@/components/authenticate';
 import TextCustomizer from '@/components/editor/text-customizer';
+import AiImageGenerator from '@/components/editor/ai-image-generator';
 
 import { PlusIcon, ReloadIcon } from '@radix-ui/react-icons';
+import { Sparkles } from 'lucide-react';
 
 import { removeBackground } from "@imgly/background-removal";
 
@@ -37,7 +39,8 @@ const Page = () => {
     const [isImageSetupDone, setIsImageSetupDone] = useState<boolean>(false);
     const [removedBgImageUrl, setRemovedBgImageUrl] = useState<string | null>(null);
     const [textSets, setTextSets] = useState<Array<any>>([]);
-    const [isPayDialogOpen, setIsPayDialogOpen] = useState<boolean>(false); 
+    const [isPayDialogOpen, setIsPayDialogOpen] = useState<boolean>(false);
+    const [isAiGeneratorOpen, setIsAiGeneratorOpen] = useState<boolean>(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -97,6 +100,22 @@ const Page = () => {
             
         } catch (error) {
             console.error(error);
+        }
+    };
+
+    const handleAiImageGenerated = async (imageUrl: string) => {
+        setSelectedImage(imageUrl);
+        setIsImageSetupDone(false);
+        setRemovedBgImageUrl(null);
+        await setupImage(imageUrl);
+    };
+
+    const handleOpenAiGenerator = () => {
+        if (currentUser && (currentUser.images_generated < 2 || currentUser.paid)) {
+            setIsAiGeneratorOpen(true);
+        } else {
+            alert("You have reached the limit of free generations.");
+            setIsPayDialogOpen(true);
         }
     };
 
@@ -288,6 +307,10 @@ const Page = () => {
                                     <Button onClick={handleUploadImage}>
                                         Upload image
                                     </Button>
+                                    <Button variant="outline" onClick={handleOpenAiGenerator}>
+                                        <Sparkles className="mr-2 h-4 w-4" />
+                                        Generate with AI
+                                    </Button>
                                     {selectedImage && (
                                         <Button onClick={saveCompositeImage} className='hidden md:flex'>
                                             Save image
@@ -421,11 +444,25 @@ const Page = () => {
                             </div>
                         </div>
                     ) : (
-                        <div className='flex items-center justify-center min-h-screen w-full'>
-                            <h2 className="text-xl font-semibold">Welcome, get started by uploading an image!</h2>
+                        <div className='flex flex-col items-center justify-center min-h-screen w-full gap-4'>
+                            <h2 className="text-xl font-semibold">Welcome, get started by uploading or generating an image!</h2>
+                            <div className="flex gap-3">
+                                <Button onClick={handleUploadImage}>
+                                    Upload image
+                                </Button>
+                                <Button variant="outline" onClick={handleOpenAiGenerator}>
+                                    <Sparkles className="mr-2 h-4 w-4" />
+                                    Generate with AI
+                                </Button>
+                            </div>
                         </div>
                     )} 
-                    <PayDialog userDetails={currentUser as any} userEmail={user.user_metadata.email} isOpen={isPayDialogOpen} onClose={() => setIsPayDialogOpen(false)} /> 
+                    <PayDialog userDetails={currentUser as any} userEmail={user.user_metadata.email} isOpen={isPayDialogOpen} onClose={() => setIsPayDialogOpen(false)} />
+                    <AiImageGenerator
+                        isOpen={isAiGeneratorOpen}
+                        onClose={() => setIsAiGeneratorOpen(false)}
+                        onImageGenerated={handleAiImageGenerated}
+                    />
                 </div>
             ) : (
                 <Authenticate />
