@@ -2,7 +2,6 @@
 'use client'
 
 import React, { useRef, useState } from 'react';
-import Image from 'next/image';
 
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -55,10 +54,19 @@ const Page = () => {
     };
 
     const handleAiImageGenerated = async (imageUrl: string) => {
-        setSelectedImage(imageUrl);
         setIsImageSetupDone(false);
         setRemovedBgImageUrl(null);
-        await setupImage(imageUrl);
+        try {
+            // Fetch the remote image and convert to a local blob URL
+            // so next/image and removeBackground can work with it
+            const response = await fetch(imageUrl);
+            const blob = await response.blob();
+            const localUrl = URL.createObjectURL(blob);
+            setSelectedImage(localUrl);
+            await setupImage(localUrl);
+        } catch (error) {
+            console.error('Failed to load AI generated image:', error);
+        }
     };
 
     const addNewTextSet = () => {
@@ -231,12 +239,11 @@ const Page = () => {
                         </div>
                         <div className="min-h-[400px] w-[80%] p-4 border border-border rounded-lg relative overflow-hidden">
                             {isImageSetupDone ? (
-                                <Image
+                                /* eslint-disable-next-line @next/next/no-img-element */
+                                <img
                                     src={selectedImage} 
                                     alt="Uploaded"
-                                    layout="fill"
-                                    objectFit="contain" 
-                                    objectPosition="center" 
+                                    className="absolute inset-0 w-full h-full object-contain"
                                 />
                             ) : (
                                 <span className='flex items-center w-full gap-2'><ReloadIcon className='animate-spin' /> Loading, please wait</span>
@@ -269,13 +276,11 @@ const Page = () => {
                                 </div>
                             ))}
                             {removedBgImageUrl && (
-                                <Image
+                                /* eslint-disable-next-line @next/next/no-img-element */
+                                <img
                                     src={removedBgImageUrl}
                                     alt="Removed bg"
-                                    layout="fill"
-                                    objectFit="contain" 
-                                    objectPosition="center" 
-                                    className="absolute top-0 left-0 w-full h-full"
+                                    className="absolute top-0 left-0 w-full h-full object-contain"
                                 /> 
                             )}
                         </div>
