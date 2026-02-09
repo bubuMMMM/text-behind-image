@@ -53,20 +53,12 @@ const Page = () => {
         }
     };
 
-    const handleAiImageGenerated = async (imageUrl: string) => {
+    const handleAiImageGenerated = async (dataUrl: string) => {
         setIsImageSetupDone(false);
         setRemovedBgImageUrl(null);
-        try {
-            // Fetch the remote image and convert to a local blob URL
-            // so next/image and removeBackground can work with it
-            const response = await fetch(imageUrl);
-            const blob = await response.blob();
-            const localUrl = URL.createObjectURL(blob);
-            setSelectedImage(localUrl);
-            await setupImage(localUrl);
-        } catch (error) {
-            console.error('Failed to load AI generated image:', error);
-        }
+        // dataUrl is already a base64 data URL from the API, use it directly
+        setSelectedImage(dataUrl);
+        await setupImage(dataUrl);
     };
 
     const addNewTextSet = () => {

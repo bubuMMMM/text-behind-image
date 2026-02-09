@@ -41,7 +41,18 @@ export async function POST(request: NextRequest) {
       throw new Error('No image generated')
     }
 
-    return NextResponse.json({ imageUrl })
+    // Fetch the image from fal and convert to base64 data URL
+    // so the browser can display it without CORS issues
+    const imageResponse = await fetch(imageUrl)
+    if (!imageResponse.ok) {
+      throw new Error('Failed to fetch generated image')
+    }
+    const imageBuffer = await imageResponse.arrayBuffer()
+    const base64 = Buffer.from(imageBuffer).toString('base64')
+    const contentType = imageResponse.headers.get('content-type') || 'image/png'
+    const dataUrl = `data:${contentType};base64,${base64}`
+
+    return NextResponse.json({ imageUrl: dataUrl })
   } catch (error) {
     console.error('Error generating image:', error)
     return NextResponse.json(

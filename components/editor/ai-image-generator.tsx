@@ -194,11 +194,23 @@ const AiImageGenerator: React.FC<AiImageGeneratorProps> = ({
             </div>
           )}
 
+          {/* Loading state */}
+          {isGenerating && (
+            <div className="flex flex-col items-center justify-center gap-3 py-8">
+              <div className="relative w-16 h-16">
+                <div className="absolute inset-0 rounded-full border-4 border-muted" />
+                <div className="absolute inset-0 rounded-full border-4 border-t-foreground animate-spin" />
+              </div>
+              <p className="text-sm text-muted-foreground animate-pulse">Generating your image...</p>
+            </div>
+          )}
+
           {/* Generated preview */}
-          {generatedPreview && (
+          {generatedPreview && !isGenerating && (
             <div className="flex flex-col gap-2">
               <Label>Generated Image</Label>
-              <div className="relative w-full aspect-square max-h-[300px] rounded-lg overflow-hidden border border-border">
+              <div className="relative w-full aspect-square max-h-[300px] rounded-lg overflow-hidden border border-border bg-muted">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={generatedPreview}
                   alt="Generated"
