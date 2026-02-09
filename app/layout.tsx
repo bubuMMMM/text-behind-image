@@ -4,8 +4,6 @@ import { SpeedInsights } from '@vercel/speed-insights/next';
 import { Inter } from 'next/font/google'
 import { GeistSans } from 'geist/font/sans';
 import "./globals.css";
-import SupabaseProvider from "@/providers/SupabaseProvider";
-import UserProvider from "@/providers/UserProvider";
 import { Toaster } from "@/components/ui/toaster"
 import { ThemeProvider } from "@/components/theme-provider";
 
@@ -24,23 +22,19 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={GeistSans.className}>
-        <SupabaseProvider>
-            <UserProvider>
-              <ThemeProvider
-                attribute="class"
-                defaultTheme="light"
-                enableSystem
-                disableTransitionOnChange
-              >
-                <div>
-                  {children}
-                  <Analytics />
-                  <SpeedInsights />
-                  <Toaster />
-                </div>
-              </ThemeProvider>
-            </UserProvider>
-        </SupabaseProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <div>
+            {children}
+            <Analytics />
+            <SpeedInsights />
+            <Toaster />
+          </div>
+        </ThemeProvider>
       </body>
     </html>
   );

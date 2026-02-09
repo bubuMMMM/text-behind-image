@@ -1,16 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import InputField from './input-field';
 import SliderField from './slider-field';
 import ColorPicker from './color-picker';
 import FontFamilyPicker from './font-picker'; 
 import { Button } from '../ui/button';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import {
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
-import { Move, Text, Bold, RotateCw, Palette, LightbulbIcon, CaseSensitive, TypeOutline, ArrowLeftRight, ArrowUpDown, AlignHorizontalSpaceAround, LockIcon } from 'lucide-react';
+import { Move, Text, Bold, RotateCw, Palette, LightbulbIcon, CaseSensitive, TypeOutline, ArrowLeftRight, ArrowUpDown, AlignHorizontalSpaceAround } from 'lucide-react';
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 
 interface TextCustomizerProps {
@@ -34,32 +33,10 @@ interface TextCustomizerProps {
     handleAttributeChange: (id: number, attribute: string, value: any) => void;
     removeTextSet: (id: number) => void;
     duplicateTextSet: (textSet: any) => void;
-    userId: string;
 }
 
-const TextCustomizer: React.FC<TextCustomizerProps> = ({ textSet, handleAttributeChange, removeTextSet, duplicateTextSet, userId }) => {
+const TextCustomizer: React.FC<TextCustomizerProps> = ({ textSet, handleAttributeChange, removeTextSet, duplicateTextSet }) => {
     const [activeControl, setActiveControl] = useState<string | null>(null);
-    const [isPaidUser, setIsPaidUser] = useState(false);
-    const supabaseClient = useSupabaseClient();
-
-    useEffect(() => { 
-        const checkUserStatus = async () => {
-            try {
-                const { data: profile, error } = await supabaseClient
-                    .from('profiles')
-                    .select('paid')
-                    .eq('id', userId)
-                    .single();
-
-                if (error) throw error;
-                setIsPaidUser(profile?.paid || false);
-            } catch (error) {
-                console.error('Error checking user status:', error);
-            }
-        };
-
-        checkUserStatus();
-    }, [userId, supabaseClient]);
 
     const controls = [
         { id: 'text', icon: <CaseSensitive size={20} />, label: 'Text' },
@@ -68,18 +45,12 @@ const TextCustomizer: React.FC<TextCustomizerProps> = ({ textSet, handleAttribut
         { id: 'position', icon: <Move size={20} />, label: 'Position' },
         { id: 'fontSize', icon: <Text size={20} />, label: 'Size' },
         { id: 'fontWeight', icon: <Bold size={20} />, label: 'Weight' },
-        { id: 'letterSpacing', icon: <AlignHorizontalSpaceAround size={20} />, label: 'Letter spacing', premium: true },
+        { id: 'letterSpacing', icon: <AlignHorizontalSpaceAround size={20} />, label: 'Letter spacing' },
         { id: 'opacity', icon: <LightbulbIcon size={20} />, label: 'Opacity' },
         { id: 'rotation', icon: <RotateCw size={20} />, label: 'Rotate' },
-        { id: 'tiltX', icon: <ArrowLeftRight size={20} />, label: 'Tilt X (3D effect)', premium: true },
-        { id: 'tiltY', icon: <ArrowUpDown size={20} />, label: 'Tilt Y (3D effect)', premium: true },
+        { id: 'tiltX', icon: <ArrowLeftRight size={20} />, label: 'Tilt X (3D effect)' },
+        { id: 'tiltY', icon: <ArrowUpDown size={20} />, label: 'Tilt Y (3D effect)' },
     ];  
-
-    const handlePremiumAttributeChange = (attribute: string, value: any) => {
-        if (isPaidUser || (attribute !== 'letterSpacing' && attribute !== 'tiltX' && attribute !== 'tiltY')) {
-            handleAttributeChange(textSet.id, attribute, value);
-        }
-    };
 
     return (
         <AccordionItem value={`item-${textSet.id}`}>
@@ -95,9 +66,8 @@ const TextCustomizer: React.FC<TextCustomizerProps> = ({ textSet, handleAttribut
                                     onClick={() => setActiveControl(activeControl === control.id ? null : control.id)}
                                     className={`flex flex-col items-center justify-center min-w-[4.2rem] h-[4.2rem] rounded-lg ${
                                         activeControl === control.id ? 'bg-primary text-primary-foreground' : 'bg-secondary'
-                                    } ${control.premium && !isPaidUser ? 'opacity-70' : ''}`}
+                                    }`}
                                 >
-                                    {control.premium && !isPaidUser && <LockIcon size={12} className="absolute top-1 right-1" />}
                                     {control.icon}
                                     <span className="text-xs mt-1">{control.label}</span>
                                 </button>
@@ -121,7 +91,6 @@ const TextCustomizer: React.FC<TextCustomizerProps> = ({ textSet, handleAttribut
                                 attribute="fontFamily"
                                 currentFont={textSet.fontFamily}
                                 handleAttributeChange={(attribute, value) => handleAttributeChange(textSet.id, attribute, value)}
-                                userId={userId}
                             />
                         )}
 
@@ -189,9 +158,7 @@ const TextCustomizer: React.FC<TextCustomizerProps> = ({ textSet, handleAttribut
                                 max={100}
                                 step={1}
                                 currentValue={textSet.letterSpacing}
-                                handleAttributeChange={(attribute, value) => handlePremiumAttributeChange(attribute, value)}
-                                disabled={!isPaidUser}
-                                premiumFeature={!isPaidUser}
+                                handleAttributeChange={(attribute, value) => handleAttributeChange(textSet.id, attribute, value)}
                             />
                         )}
 
@@ -227,9 +194,7 @@ const TextCustomizer: React.FC<TextCustomizerProps> = ({ textSet, handleAttribut
                                 max={45}
                                 step={1}
                                 currentValue={textSet.tiltX}
-                                handleAttributeChange={(attribute, value) => handlePremiumAttributeChange(attribute, value)}
-                                disabled={!isPaidUser}
-                                premiumFeature={!isPaidUser}
+                                handleAttributeChange={(attribute, value) => handleAttributeChange(textSet.id, attribute, value)}
                             />
                         )}
 
@@ -241,9 +206,7 @@ const TextCustomizer: React.FC<TextCustomizerProps> = ({ textSet, handleAttribut
                                 max={45}
                                 step={1}
                                 currentValue={textSet.tiltY}
-                                handleAttributeChange={(attribute, value) => handlePremiumAttributeChange(attribute, value)}
-                                disabled={!isPaidUser}
-                                premiumFeature={!isPaidUser}
+                                handleAttributeChange={(attribute, value) => handleAttributeChange(textSet.id, attribute, value)}
                             />
                         )}
                     </div>
@@ -262,7 +225,6 @@ const TextCustomizer: React.FC<TextCustomizerProps> = ({ textSet, handleAttribut
                             attribute="fontFamily"
                             currentFont={textSet.fontFamily}
                             handleAttributeChange={(attribute, value) => handleAttributeChange(textSet.id, attribute, value)}
-                            userId={userId}
                         />
                         <ColorPicker
                             attribute="color"
@@ -315,9 +277,7 @@ const TextCustomizer: React.FC<TextCustomizerProps> = ({ textSet, handleAttribut
                         max={100}
                         step={1}
                         currentValue={textSet.letterSpacing}
-                        handleAttributeChange={(attribute, value) => handlePremiumAttributeChange(attribute, value)}
-                        disabled={!isPaidUser}
-                        premiumFeature={!isPaidUser}
+                        handleAttributeChange={(attribute, value) => handleAttributeChange(textSet.id, attribute, value)}
                     />
                     <SliderField
                         attribute="opacity"
@@ -344,9 +304,7 @@ const TextCustomizer: React.FC<TextCustomizerProps> = ({ textSet, handleAttribut
                         max={45}
                         step={1}
                         currentValue={textSet.tiltX}
-                        handleAttributeChange={(attribute, value) => handlePremiumAttributeChange(attribute, value)}
-                        disabled={!isPaidUser}
-                        premiumFeature={!isPaidUser}
+                        handleAttributeChange={(attribute, value) => handleAttributeChange(textSet.id, attribute, value)}
                     />
                     <SliderField
                         attribute="tiltY"
@@ -355,9 +313,7 @@ const TextCustomizer: React.FC<TextCustomizerProps> = ({ textSet, handleAttribut
                         max={45}
                         step={1}
                         currentValue={textSet.tiltY}
-                        handleAttributeChange={(attribute, value) => handlePremiumAttributeChange(attribute, value)}
-                        disabled={!isPaidUser}
-                        premiumFeature={!isPaidUser}
+                        handleAttributeChange={(attribute, value) => handleAttributeChange(textSet.id, attribute, value)}
                     />
                 </div>
 
