@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -24,8 +24,59 @@ const Page = () => {
     const [removedBgImageUrl, setRemovedBgImageUrl] = useState<string | null>(null);
     const [textSets, setTextSets] = useState<Array<any>>([]);
     const [isAiGeneratorOpen, setIsAiGeneratorOpen] = useState<boolean>(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    // Track created object URLs so we can revoke them and avoid memory leaks
+    const objectUrlsRef = useRef<string[]>([]);
+
+    const trackUrl = (url: string) => {
+        objectUrlsRef.current.push(url);
+        return url;
+    };
+
+    const revokeAllUrls = () => {
+        objectUrlsRef.current.forEach((url) => {
+            try { URL.revokeObjectURL(url); } catch { /* noop */ }
+        });
+        objectUrlsRef.current = [];
+    };
+
+    // Downscale large images before processing to keep memory usage low on mobile.
+    const resizeImage = (src: string, maxDim: number): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const img = new (window as any).Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+                let width = img.naturalWidth;
+                let height = img.naturalHeight;
+                if (width > maxDim || height > maxDim) {
+                    if (width >= height) {
+                        height = Math.round((height * maxDim) / width);
+                        width = maxDim;
+                    } else {
+                        width = Math.round((width * maxDim) / height);
+                        height = maxDim;
+                    }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) { reject(new Error('Could not get canvas context')); return; }
+                ctx.drawImage(img, 0, 0, width, height);
+                canvas.toBlob(
+                    (blob) => {
+                        if (blob) resolve(trackUrl(URL.createObjectURL(blob)));
+                        else reject(new Error('Image resize failed'));
+                    },
+                    'image/png',
+                );
+            };
+            img.onerror = () => reject(new Error('Could not load image'));
+            img.src = src;
+        });
+    };
 
     const handleUploadImage = () => {
         if (fileInputRef.current) {
@@ -37,28 +88,53 @@ const Page = () => {
         const file = event.target.files?.[0];
         if (file) {
             const imageUrl = URL.createObjectURL(file);
-            setSelectedImage(imageUrl);
             await setupImage(imageUrl);
+            // release the original full-res file URL; setupImage works off a resized copy
+            try { URL.revokeObjectURL(imageUrl); } catch { /* noop */ }
         }
+        // allow re-uploading the same file
+        if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
     const setupImage = async (imageUrl: string) => {
+        // Reset previous state and free old image memory
+        revokeAllUrls();
+        setErrorMessage(null);
+        setIsImageSetupDone(false);
+        setRemovedBgImageUrl(null);
+        setSelectedImage(null);
+
         try {
-            const imageBlob = await removeBackground(imageUrl);
-            const url = URL.createObjectURL(imageBlob);
+            // Downscale to a max of 1024px on the longest side before heavy processing
+            const resizedUrl = await resizeImage(imageUrl, 1024);
+            setSelectedImage(resizedUrl);
+
+            const imageBlob = await removeBackground(resizedUrl, {
+                model: 'isnet_fp16',
+                output: { format: 'image/png' },
+            });
+            const url = trackUrl(URL.createObjectURL(imageBlob));
             setRemovedBgImageUrl(url);
             setIsImageSetupDone(true);
         } catch (error) {
-            console.error(error);
+            console.error('[v0] Background removal failed:', error);
+            setErrorMessage('Could not process this image. Try a different or smaller photo.');
+            setIsImageSetupDone(false);
         }
     };
 
     const handleAiImageGenerated = async (dataUrl: string) => {
-        setIsImageSetupDone(false);
-        setRemovedBgImageUrl(null);
-        setSelectedImage(dataUrl);
         await setupImage(dataUrl);
     };
+
+    // Free any remaining object URLs when leaving the editor
+    useEffect(() => {
+        return () => {
+            objectUrlsRef.current.forEach((url) => {
+                try { URL.revokeObjectURL(url); } catch { /* noop */ }
+            });
+        };
+    }, []);
 
     const addNewTextSet = () => {
         const newId = Math.max(...textSets.map(set => set.id), 0) + 1;
@@ -282,6 +358,14 @@ const Page = () => {
                                     alt="Uploaded"
                                     className="absolute inset-0 w-full h-full object-contain"
                                 />
+                            ) : errorMessage ? (
+                                <div className='flex flex-col items-center justify-center w-full h-full gap-3 p-6 text-center'>
+                                    <span className='text-sm text-destructive'>{errorMessage}</span>
+                                    <Button variant="outline" size="sm" onClick={handleUploadImage} className="gap-2">
+                                        <Upload className="h-3.5 w-3.5" />
+                                        Try another image
+                                    </Button>
+                                </div>
                             ) : (
                                 <div className='flex flex-col items-center justify-center w-full h-full gap-3'>
                                     <ReloadIcon className='h-5 w-5 animate-spin text-muted-foreground' />

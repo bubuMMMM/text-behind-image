@@ -69,12 +69,6 @@ export default function LandingPage() {
                   key={item.label}
                   className={`relative aspect-[4/5] rounded-xl overflow-hidden border border-border bg-gradient-to-br ${item.bg} flex items-center justify-center group cursor-pointer`}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={`/placeholder.svg?height=500&width=400`}
-                    alt={item.label}
-                    className="absolute inset-0 w-full h-full object-cover opacity-30 group-hover:opacity-40 transition-opacity duration-300"
-                  />
                   <span className={`relative text-2xl sm:text-3xl md:text-4xl font-bold tracking-widest ${item.text} opacity-80 group-hover:opacity-100 transition-opacity duration-300`}>
                     {item.label}
                   </span>
