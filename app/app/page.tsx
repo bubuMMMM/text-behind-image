@@ -1,73 +1,86 @@
-// app/app/page.tsx
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react';
-import Image from 'next/image';
+import React, { useRef, useState, useEffect } from 'react';
+import Link from 'next/link';
 
-import { useUser } from '@/hooks/useUser';
-import { useSessionContext, useSupabaseClient } from '@supabase/auth-helpers-react';
-
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Separator } from '@/components/ui/separator';
 import { Accordion } from '@/components/ui/accordion';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ModeToggle } from '@/components/mode-toggle';
-import { Profile } from '@/types';
-import Authenticate from '@/components/authenticate';
 import TextCustomizer from '@/components/editor/text-customizer';
+import AiImageGenerator from '@/components/editor/ai-image-generator';
 
 import { PlusIcon, ReloadIcon } from '@radix-ui/react-icons';
+import { Sparkles, Upload, Download, ArrowLeft } from 'lucide-react';
 
 import { removeBackground } from "@imgly/background-removal";
 
 import '@/app/fonts.css';
-import PayDialog from '@/components/pay-dialog';
-import AppAds from '@/components/editor/app-ads';
-import BrowserCashAd from '@/ads/browsercash';
 
 const Page = () => {
-    const { user } = useUser();
-    const { session } = useSessionContext();
-    const supabaseClient = useSupabaseClient();
-    const [currentUser, setCurrentUser] = useState<Profile>()
-
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const [isImageSetupDone, setIsImageSetupDone] = useState<boolean>(false);
     const [removedBgImageUrl, setRemovedBgImageUrl] = useState<string | null>(null);
     const [textSets, setTextSets] = useState<Array<any>>([]);
-    const [isPayDialogOpen, setIsPayDialogOpen] = useState<boolean>(false); 
+    const [isAiGeneratorOpen, setIsAiGeneratorOpen] = useState<boolean>(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    // Track created object URLs so we can revoke them and avoid memory leaks
+    const objectUrlsRef = useRef<string[]>([]);
 
-    const getCurrentUser = async (userId: string) => {
-        try {
-            const { data: profile, error } = await supabaseClient
-                .from('profiles')
-                .select('*')
-                .eq('id', userId)
+    const trackUrl = (url: string) => {
+        objectUrlsRef.current.push(url);
+        return url;
+    };
 
-            if (error) {
-                throw error;
-            }
+    const revokeAllUrls = () => {
+        objectUrlsRef.current.forEach((url) => {
+            try { URL.revokeObjectURL(url); } catch { /* noop */ }
+        });
+        objectUrlsRef.current = [];
+    };
 
-            if (profile) {
-                setCurrentUser(profile[0]);
-            }
-        } catch (error) {
-            console.error('Error fetching user profile:', error);
-        }
+    // Downscale large images before processing to keep memory usage low on mobile.
+    const resizeImage = (src: string, maxDim: number): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const img = new (window as any).Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+                let width = img.naturalWidth;
+                let height = img.naturalHeight;
+                if (width > maxDim || height > maxDim) {
+                    if (width >= height) {
+                        height = Math.round((height * maxDim) / width);
+                        width = maxDim;
+                    } else {
+                        width = Math.round((width * maxDim) / height);
+                        height = maxDim;
+                    }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) { reject(new Error('Could not get canvas context')); return; }
+                ctx.drawImage(img, 0, 0, width, height);
+                canvas.toBlob(
+                    (blob) => {
+                        if (blob) resolve(trackUrl(URL.createObjectURL(blob)));
+                        else reject(new Error('Image resize failed'));
+                    },
+                    'image/png',
+                );
+            };
+            img.onerror = () => reject(new Error('Could not load image'));
+            img.src = src;
+        });
     };
 
     const handleUploadImage = () => {
-        if (currentUser && (currentUser.images_generated < 2 || currentUser.paid)) {
-            if (fileInputRef.current) {
-                fileInputRef.current.click();
-            }
-        } else {
-            alert("You have reached the limit of free generations.");
-            setIsPayDialogOpen(true);
+        if (fileInputRef.current) {
+            fileInputRef.current.click();
         }
     };
 
@@ -75,30 +88,53 @@ const Page = () => {
         const file = event.target.files?.[0];
         if (file) {
             const imageUrl = URL.createObjectURL(file);
-            setSelectedImage(imageUrl);
             await setupImage(imageUrl);
+            // release the original full-res file URL; setupImage works off a resized copy
+            try { URL.revokeObjectURL(imageUrl); } catch { /* noop */ }
         }
+        // allow re-uploading the same file
+        if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
     const setupImage = async (imageUrl: string) => {
+        // Reset previous state and free old image memory
+        revokeAllUrls();
+        setErrorMessage(null);
+        setIsImageSetupDone(false);
+        setRemovedBgImageUrl(null);
+        setSelectedImage(null);
+
         try {
-            const imageBlob = await removeBackground(imageUrl);
-            const url = URL.createObjectURL(imageBlob);
+            // Downscale to a max of 1024px on the longest side before heavy processing
+            const resizedUrl = await resizeImage(imageUrl, 1024);
+            setSelectedImage(resizedUrl);
+
+            const imageBlob = await removeBackground(resizedUrl, {
+                model: 'isnet_fp16',
+                output: { format: 'image/png' },
+            });
+            const url = trackUrl(URL.createObjectURL(imageBlob));
             setRemovedBgImageUrl(url);
             setIsImageSetupDone(true);
-
-            if (currentUser) {
-                await supabaseClient
-                    .from('profiles')
-                    .update({ images_generated: currentUser.images_generated + 1 })
-                    .eq('id', currentUser.id) 
-                    .select();
-            }
-            
         } catch (error) {
-            console.error(error);
+            console.error('[v0] Background removal failed:', error);
+            setErrorMessage('Could not process this image. Try a different or smaller photo.');
+            setIsImageSetupDone(false);
         }
     };
+
+    const handleAiImageGenerated = async (dataUrl: string) => {
+        await setupImage(dataUrl);
+    };
+
+    // Free any remaining object URLs when leaving the editor
+    useEffect(() => {
+        return () => {
+            objectUrlsRef.current.forEach((url) => {
+                try { URL.revokeObjectURL(url); } catch { /* noop */ }
+            });
+        };
+    }, []);
 
     const addNewTextSet = () => {
         const newId = Math.max(...textSets.map(set => set.id), 0) + 1;
@@ -108,16 +144,21 @@ const Page = () => {
             fontFamily: 'Inter',
             top: 0,
             left: 0,
-            color: 'white',
+            color: '#ffffff',
             fontSize: 200,
             fontWeight: 800,
             opacity: 1,
             shadowColor: 'rgba(0, 0, 0, 0.8)',
-            shadowSize: 4,
+            shadowSize: 0,
             rotation: 0,
             tiltX: 0,
             tiltY: 0,
-            letterSpacing: 0
+            letterSpacing: 0,
+            strokeColor: '#000000',
+            strokeWidth: 0,
+            useGradient: false,
+            gradientFrom: '#ffffff',
+            gradientTo: '#888888',
         }]);
     };
 
@@ -154,57 +195,82 @@ const Page = () => {
             textSets.forEach(textSet => {
                 ctx.save();
                 
-                // Set up text properties
-                ctx.font = `${textSet.fontWeight} ${textSet.fontSize * 3}px ${textSet.fontFamily}`;
-                ctx.fillStyle = textSet.color;
+                const scaledFontSize = textSet.fontSize * 3;
+                ctx.font = `${textSet.fontWeight} ${scaledFontSize}px ${textSet.fontFamily}`;
                 ctx.globalAlpha = textSet.opacity;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.letterSpacing = `${textSet.letterSpacing}px`;
     
                 const x = canvas.width * (textSet.left + 50) / 100;
                 const y = canvas.height * (50 - textSet.top) / 100;
     
-                // Move to position first
                 ctx.translate(x, y);
                 
-                // Apply 3D transforms
                 const tiltXRad = (-textSet.tiltX * Math.PI) / 180;
                 const tiltYRad = (-textSet.tiltY * Math.PI) / 180;
     
-                // Use a simpler transform that maintains the visual tilt
                 ctx.transform(
-                    Math.cos(tiltYRad),          // Horizontal scaling
-                    Math.sin(0),          // Vertical skewing
-                    -Math.sin(0),         // Horizontal skewing
-                    Math.cos(tiltXRad),          // Vertical scaling
-                    0,                           // Horizontal translation
-                    0                            // Vertical translation
+                    Math.cos(tiltYRad),
+                    Math.sin(0),
+                    -Math.sin(0),
+                    Math.cos(tiltXRad),
+                    0,
+                    0
                 );
     
-                // Apply rotation last
                 ctx.rotate((textSet.rotation * Math.PI) / 180);
+
+                // Shadow
+                if (textSet.shadowSize > 0) {
+                    ctx.shadowColor = textSet.shadowColor;
+                    ctx.shadowBlur = textSet.shadowSize * 3;
+                    ctx.shadowOffsetX = 0;
+                    ctx.shadowOffsetY = 0;
+                }
+
+                // Stroke
+                if (textSet.strokeWidth > 0) {
+                    ctx.strokeStyle = textSet.strokeColor;
+                    ctx.lineWidth = textSet.strokeWidth * 3;
+                    ctx.lineJoin = 'round';
+                    if (textSet.letterSpacing === 0) {
+                        ctx.strokeText(textSet.text, 0, 0);
+                    } else {
+                        const chars = textSet.text.split('');
+                        let totalWidth = 0;
+                        chars.forEach((char: string, i: number) => {
+                            totalWidth += ctx.measureText(char).width + (i < chars.length - 1 ? textSet.letterSpacing : 0);
+                        });
+                        let currentX = -totalWidth / 2;
+                        chars.forEach((char: string) => {
+                            const charWidth = ctx.measureText(char).width;
+                            ctx.strokeText(char, currentX + charWidth / 2, 0);
+                            currentX += charWidth + textSet.letterSpacing;
+                        });
+                    }
+                }
+
+                // Fill (gradient or solid)
+                if (textSet.useGradient) {
+                    const textWidth = ctx.measureText(textSet.text).width;
+                    const gradient = ctx.createLinearGradient(-textWidth / 2, 0, textWidth / 2, 0);
+                    gradient.addColorStop(0, textSet.gradientFrom);
+                    gradient.addColorStop(1, textSet.gradientTo);
+                    ctx.fillStyle = gradient;
+                } else {
+                    ctx.fillStyle = textSet.color;
+                }
     
                 if (textSet.letterSpacing === 0) {
-                    // Use standard text rendering if no letter spacing
                     ctx.fillText(textSet.text, 0, 0);
                 } else {
-                    // Manual letter spacing implementation
                     const chars = textSet.text.split('');
-                    let currentX = 0;
-                    // Calculate total width to center properly
-                    const totalWidth = chars.reduce((width, char, i) => {
-                        const charWidth = ctx.measureText(char).width;
-                        return width + charWidth + (i < chars.length - 1 ? textSet.letterSpacing : 0);
-                    }, 0);
-                    
-
-                
-                    // Start position (centered)
-                    currentX = -totalWidth / 2;
-                    
-                    // Draw each character with spacing
-                    chars.forEach((char, i) => {
+                    let totalWidth = 0;
+                    chars.forEach((char: string, i: number) => {
+                        totalWidth += ctx.measureText(char).width + (i < chars.length - 1 ? textSet.letterSpacing : 0);
+                    });
+                    let currentX = -totalWidth / 2;
+                    chars.forEach((char: string) => {
                         const charWidth = ctx.measureText(char).width;
                         ctx.fillText(char, currentX + charWidth / 2, 0);
                         currentX += charWidth + textSet.letterSpacing;
@@ -235,202 +301,178 @@ const Page = () => {
             link.click();
         }
     };
-
-    useEffect(() => {
-      if (user?.id) {
-        getCurrentUser(user.id)
-      }
-    }, [user])
     
     return (
-        <>
-            <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1609710199882100" crossOrigin="anonymous"></script>
-            {user && session && session.user && currentUser ? (
-                <div className='flex flex-col h-screen'>
-                    {!currentUser.paid && (
-                        <BrowserCashAd />
+        <div className='flex flex-col h-screen bg-background'>
+            {/* Header */}
+            <header className='flex items-center justify-between px-4 md:px-6 h-14 border-b border-border'>
+                <div className="flex items-center gap-4">
+                    <Link href="/" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
+                        <ArrowLeft className="h-4 w-4" />
+                        <span className="text-sm hidden md:inline">Back</span>
+                    </Link>
+                    <Separator orientation="vertical" className="h-6" />
+                    <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                        <span className="md:hidden">TBI</span>
+                        <span className="hidden md:inline">Text Behind Image</span>
+                    </h2>
+                </div>
+
+                <div className='flex items-center gap-2'>
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        style={{ display: 'none' }}
+                        onChange={handleFileChange}
+                        accept=".jpg, .jpeg, .png"
+                    />
+                    <Button variant="outline" size="sm" onClick={handleUploadImage} className="gap-2">
+                        <Upload className="h-3.5 w-3.5" />
+                        <span className="hidden md:inline">Upload</span>
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setIsAiGeneratorOpen(true)} className="gap-2">
+                        <Sparkles className="h-3.5 w-3.5" />
+                        <span className="hidden md:inline">AI Generate</span>
+                    </Button>
+                    {selectedImage && (
+                        <Button size="sm" onClick={saveCompositeImage} className="gap-2">
+                            <Download className="h-3.5 w-3.5" />
+                            <span className="hidden md:inline">Export</span>
+                        </Button>
                     )}
-                    <header className='flex flex-row items-center justify-between p-5 px-10'>
-                        <h2 className="text-4xl md:text-2xl font-semibold tracking-tight">
-                            <span className="block md:hidden">TBI</span>
-                            <span className="hidden md:block">Text behind image editor</span>
-                        </h2>
-                        <div className='flex gap-4 items-center'>
-                            <input
-                                type="file"
-                                ref={fileInputRef}
-                                style={{ display: 'none' }}
-                                onChange={handleFileChange}
-                                accept=".jpg, .jpeg, .png"
-                            />
-                            <div className='flex items-center gap-5'>
-                                <div className='hidden md:block font-semibold'>
-                                    {currentUser.paid ? (
-                                        <p className='text-sm'>
-                                            Unlimited generations
-                                        </p>
-                                    ) : (
-                                        <div className='flex items-center gap-2'>
-                                            <p className='text-sm'>
-                                                {2 - (currentUser.images_generated)} generations left
-                                            </p>
-                                            <Button 
-                                                variant="link" 
-                                                className="p-0 h-auto text-sm text-primary hover:underline"
-                                                onClick={() => setIsPayDialogOpen(true)}
-                                            >
-                                                Upgrade
-                                            </Button>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className='flex gap-2'>
-                                    <Button onClick={handleUploadImage}>
-                                        Upload image
+                    <Separator orientation="vertical" className="h-6 mx-1" />
+                    <ModeToggle />
+                </div>
+            </header>
+
+            {selectedImage ? (
+                <div className='flex flex-col md:flex-row flex-1 overflow-hidden'>
+                    {/* Canvas area */}
+                    <div className="flex-1 flex items-center justify-center p-4 md:p-8 bg-muted/30 overflow-auto">
+                        <canvas ref={canvasRef} style={{ display: 'none' }} />
+                        <div className="relative w-full max-w-2xl aspect-square rounded-lg overflow-hidden border border-border bg-muted/50 shadow-sm">
+                            {isImageSetupDone ? (
+                                /* eslint-disable-next-line @next/next/no-img-element */
+                                <img
+                                    src={selectedImage} 
+                                    alt="Uploaded"
+                                    className="absolute inset-0 w-full h-full object-contain"
+                                />
+                            ) : errorMessage ? (
+                                <div className='flex flex-col items-center justify-center w-full h-full gap-3 p-6 text-center'>
+                                    <span className='text-sm text-destructive'>{errorMessage}</span>
+                                    <Button variant="outline" size="sm" onClick={handleUploadImage} className="gap-2">
+                                        <Upload className="h-3.5 w-3.5" />
+                                        Try another image
                                     </Button>
-                                    {selectedImage && (
-                                        <Button onClick={saveCompositeImage} className='hidden md:flex'>
-                                            Save image
-                                        </Button>
-                                    )}
                                 </div>
-                            </div>
-                            <ModeToggle />
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Avatar className="cursor-pointer">
-                                        <AvatarImage src={currentUser?.avatar_url} /> 
-                                        <AvatarFallback>TBI</AvatarFallback>
-                                    </Avatar>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent className="w-56" align="end">
-                                    <DropdownMenuLabel>
-                                        <div className="flex flex-col space-y-1">
-                                            <p className="text-sm font-medium leading-none">{currentUser?.full_name}</p>
-                                            <p className="text-xs leading-none text-muted-foreground">{user?.user_metadata.email}</p>
-                                        </div>
-                                    </DropdownMenuLabel>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={() => setIsPayDialogOpen(true)}>
-                                        <button>{currentUser?.paid ? 'View Plan' : 'Upgrade to Pro'}</button>
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                            ) : (
+                                <div className='flex flex-col items-center justify-center w-full h-full gap-3'>
+                                    <ReloadIcon className='h-5 w-5 animate-spin text-muted-foreground' />
+                                    <span className='text-sm text-muted-foreground'>Processing image...</span>
+                                </div>
+                            )}
+                            {isImageSetupDone && textSets.map(textSet => (
+                                <div
+                                    key={textSet.id}
+                                    style={{
+                                        position: 'absolute',
+                                        top: `${50 - textSet.top}%`,
+                                        left: `${textSet.left + 50}%`,
+                                        transform: `
+                                            translate(-50%, -50%) 
+                                            rotate(${textSet.rotation}deg)
+                                            perspective(1000px)
+                                            rotateX(${textSet.tiltX}deg)
+                                            rotateY(${textSet.tiltY}deg)
+                                        `,
+                                        color: textSet.useGradient ? 'transparent' : textSet.color,
+                                        background: textSet.useGradient
+                                            ? `linear-gradient(90deg, ${textSet.gradientFrom}, ${textSet.gradientTo})`
+                                            : 'none',
+                                        WebkitBackgroundClip: textSet.useGradient ? 'text' : undefined,
+                                        WebkitTextFillColor: textSet.useGradient ? 'transparent' : undefined,
+                                        textAlign: 'center',
+                                        fontSize: `${textSet.fontSize}px`,
+                                        fontWeight: textSet.fontWeight,
+                                        fontFamily: textSet.fontFamily,
+                                        opacity: textSet.opacity,
+                                        letterSpacing: `${textSet.letterSpacing}px`,
+                                        transformStyle: 'preserve-3d',
+                                        textShadow: textSet.shadowSize > 0
+                                            ? `0 0 ${textSet.shadowSize}px ${textSet.shadowColor}`
+                                            : 'none',
+                                        WebkitTextStroke: textSet.strokeWidth > 0
+                                            ? `${textSet.strokeWidth}px ${textSet.strokeColor}`
+                                            : undefined,
+                                    }}
+                                >
+                                    {textSet.text}
+                                </div>
+                            ))}
+                            {removedBgImageUrl && (
+                                /* eslint-disable-next-line @next/next/no-img-element */
+                                <img
+                                    src={removedBgImageUrl}
+                                    alt="Removed bg"
+                                    className="absolute top-0 left-0 w-full h-full object-contain"
+                                /> 
+                            )}
                         </div>
-                    </header>
-                    <Separator /> 
-                    {selectedImage ? (
-                        <div className='flex flex-col md:flex-row items-start justify-start gap-10 w-full h-screen px-10 mt-2'>
-                            <div className="flex flex-col items-start justify-start w-full md:w-1/2 gap-4">
-                                <canvas ref={canvasRef} style={{ display: 'none' }} />
-                                <div className='flex items-center gap-2'>
-                                    <Button onClick={saveCompositeImage} className='md:hidden'>
-                                        Save image
-                                    </Button>
-                                    <div className='block md:hidden'>
-                                        {currentUser.paid ? (
-                                            <p className='text-sm'>
-                                                Unlimited generations
-                                            </p>
-                                        ) : (
-                                            <div className='flex items-center gap-5'>
-                                                <p className='text-sm'>
-                                                    {2 - (currentUser.images_generated)} generations left
-                                                </p>
-                                                <Button 
-                                                    variant="link" 
-                                                    className="p-0 h-auto text-sm text-primary hover:underline"
-                                                    onClick={() => setIsPayDialogOpen(true)}
-                                                >
-                                                    Upgrade
-                                                </Button>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="min-h-[400px] w-[80%] p-4 border border-border rounded-lg relative overflow-hidden">
-                                    {isImageSetupDone ? (
-                                        <Image
-                                            src={selectedImage} 
-                                            alt="Uploaded"
-                                            layout="fill"
-                                            objectFit="contain" 
-                                            objectPosition="center" 
-                                        />
-                                    ) : (
-                                        <span className='flex items-center w-full gap-2'><ReloadIcon className='animate-spin' /> Loading, please wait</span>
-                                    )}
-                                    {isImageSetupDone && textSets.map(textSet => (
-                                        <div
+                    </div>
+
+                    {/* Sidebar */}
+                    <div className='w-full max-h-[40vh] md:max-h-none md:w-[380px] border-t md:border-t-0 md:border-l border-border flex flex-col bg-background'>
+                        <div className="p-3 border-b border-border">
+                            <Button variant={'secondary'} onClick={addNewTextSet} className="w-full gap-2 h-9 text-sm">
+                                <PlusIcon className='h-3.5 w-3.5' />
+                                Add Text Layer
+                            </Button>
+                        </div>
+                        <ScrollArea className="flex-1">
+                            <div className="p-3">
+                                <Accordion type="single" collapsible className="w-full">
+                                    {textSets.map(textSet => (
+                                        <TextCustomizer 
                                             key={textSet.id}
-                                            style={{
-                                                position: 'absolute',
-                                                top: `${50 - textSet.top}%`,
-                                                left: `${textSet.left + 50}%`,
-                                                transform: `
-                                                    translate(-50%, -50%) 
-                                                    rotate(${textSet.rotation}deg)
-                                                    perspective(1000px)
-                                                    rotateX(${textSet.tiltX}deg)
-                                                    rotateY(${textSet.tiltY}deg)
-                                                `,
-                                                color: textSet.color,
-                                                textAlign: 'center',
-                                                fontSize: `${textSet.fontSize}px`,
-                                                fontWeight: textSet.fontWeight,
-                                                fontFamily: textSet.fontFamily,
-                                                opacity: textSet.opacity,
-                                                letterSpacing: `${textSet.letterSpacing}px`,
-                                                transformStyle: 'preserve-3d'
-                                            }}
-                                        >
-                                            {textSet.text}
-                                        </div>
+                                            textSet={textSet}
+                                            handleAttributeChange={handleAttributeChange}
+                                            removeTextSet={removeTextSet}
+                                            duplicateTextSet={duplicateTextSet}
+                                        />
                                     ))}
-                                    {removedBgImageUrl && (
-                                        <Image
-                                            src={removedBgImageUrl}
-                                            alt="Removed bg"
-                                            layout="fill"
-                                            objectFit="contain" 
-                                            objectPosition="center" 
-                                            className="absolute top-0 left-0 w-full h-full"
-                                        /> 
-                                    )}
-                                </div>
-                                {!currentUser.paid && (
-                                    <AppAds />
-                                )}
+                                </Accordion>
                             </div>
-                            <div className='flex flex-col w-full md:w-1/2'>
-                                <Button variant={'secondary'} onClick={addNewTextSet}><PlusIcon className='mr-2'/> Add New Text Set</Button>
-                                <ScrollArea className="h-[calc(100vh-10rem)] p-2">
-                                    <Accordion type="single" collapsible className="w-full mt-2">
-                                        {textSets.map(textSet => (
-                                            <TextCustomizer 
-                                                key={textSet.id}
-                                                textSet={textSet}
-                                                handleAttributeChange={handleAttributeChange}
-                                                removeTextSet={removeTextSet}
-                                                duplicateTextSet={duplicateTextSet}
-                                                userId={currentUser.id}
-                                            />
-                                        ))}
-                                    </Accordion>
-                                </ScrollArea>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className='flex items-center justify-center min-h-screen w-full'>
-                            <h2 className="text-xl font-semibold">Welcome, get started by uploading an image!</h2>
-                        </div>
-                    )} 
-                    <PayDialog userDetails={currentUser as any} userEmail={user.user_metadata.email} isOpen={isPayDialogOpen} onClose={() => setIsPayDialogOpen(false)} /> 
+                        </ScrollArea>
+                    </div>
                 </div>
             ) : (
-                <Authenticate />
-            )}
-        </>
+                <div className='flex-1 flex flex-col items-center justify-center gap-6'>
+                    <div className="flex flex-col items-center gap-2">
+                        <div className="h-12 w-12 rounded-xl bg-muted flex items-center justify-center mb-2">
+                            <Sparkles className="h-6 w-6 text-muted-foreground" />
+                        </div>
+                        <h2 className="text-xl font-semibold text-foreground tracking-tight">Get started</h2>
+                        <p className="text-sm text-muted-foreground">Upload a photo or generate one with AI</p>
+                    </div>
+                    <div className="flex gap-3">
+                        <Button variant="outline" onClick={handleUploadImage} className="gap-2">
+                            <Upload className="h-4 w-4" />
+                            Upload Image
+                        </Button>
+                        <Button onClick={() => setIsAiGeneratorOpen(true)} className="gap-2">
+                            <Sparkles className="h-4 w-4" />
+                            Generate with AI
+                        </Button>
+                    </div>
+                </div>
+            )} 
+            <AiImageGenerator
+                isOpen={isAiGeneratorOpen}
+                onClose={() => setIsAiGeneratorOpen(false)}
+                onImageGenerated={handleAiImageGenerated}
+            />
+        </div>
     );
 }
 
